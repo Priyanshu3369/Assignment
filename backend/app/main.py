@@ -1,7 +1,13 @@
+from dotenv import load_dotenv
+load_dotenv()
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from .schemas import AnalyzeRequest, AnalyzeResponse
 from .pipelines import nlp, vision, toxicity, fusion
+from .db.mongo import history_collection
+from .models import HistoryEntry
+from datetime import datetime
+
 
 app = FastAPI(title="Multimodal Analyzer")
 
@@ -16,7 +22,6 @@ app.add_middleware(
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(payload: AnalyzeRequest):
@@ -43,7 +48,7 @@ async def analyze(payload: AnalyzeRequest):
     ocr_toxicity = toxicity.check_toxicity(ocr_text)
     final_toxicity = max(text_toxicity, ocr_toxicity)
 
-    # --- Fusion (smart response) ---
+    # --- Fusion ---
     auto_response = fusion.generate_response(
         sentiment=sentiment,
         topic=topic,
@@ -52,7 +57,7 @@ async def analyze(payload: AnalyzeRequest):
         toxicity=final_toxicity
     )
 
-    return AnalyzeResponse(
+    response = AnalyzeResponse(
         text_sentiment=sentiment,
         text_summary=summary,
         topic=topic,
@@ -62,3 +67,24 @@ async def analyze(payload: AnalyzeRequest):
         automated_response=auto_response,
         flags={"toxic": final_toxicity > 0.5}
     )
+
+    # --- Save to MongoDB ---
+    entry = HistoryEntry(
+        text=payload.text,
+        image_base64=payload.image_base64,
+        response=response.dict(),
+        timestamp=datetime.utcnow()
+    )
+    await history_collection.insert_one(entry.dict())
+
+    return response
+
+
+@app.get("/history")
+async def get_history(limit: int = 10):
+    cursor = history_collection.find().sort("timestamp", -1).limit(limit)
+    results = []
+    async for doc in cursor:
+        doc["_id"] = str(doc["_id"])  # Convert ObjectId → string
+        results.append(doc)
+    return results
