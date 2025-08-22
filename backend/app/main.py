@@ -23,6 +23,7 @@ app.add_middleware(
 def health():
     return {"status": "ok"}
 
+
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(payload: AnalyzeRequest):
     if not payload.text:
@@ -65,7 +66,8 @@ async def analyze(payload: AnalyzeRequest):
         ocr_text=ocr_text,
         toxicity_score=final_toxicity,
         automated_response=auto_response,
-        flags={"toxic": final_toxicity > 0.5}
+        flags={"toxic": final_toxicity > 0.5},
+        image_base64=payload.image_base64  # ✅ include original image in response
     )
 
     # --- Save to MongoDB ---
@@ -88,4 +90,3 @@ async def get_history(limit: int = 10):
         doc["_id"] = str(doc["_id"])
         results.append(doc)
     return results
-
