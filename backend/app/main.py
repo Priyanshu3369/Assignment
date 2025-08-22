@@ -82,9 +82,10 @@ async def analyze(payload: AnalyzeRequest):
 
 @app.get("/history")
 async def get_history(limit: int = 10):
-    cursor = history_collection.find().sort("timestamp", -1).limit(limit)
+    cursor = history_collection.find().sort("_id", -1).limit(limit)
     results = []
     async for doc in cursor:
-        doc["_id"] = str(doc["_id"])  # Convert ObjectId → string
+        doc["_id"] = str(doc["_id"])
         results.append(doc)
     return results
+
