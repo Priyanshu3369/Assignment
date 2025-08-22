@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from .schemas import AnalyzeRequest, AnalyzeResponse
-from .pipelines import nlp, vision
+from .pipelines import nlp, vision, toxicity
 
 app = FastAPI(title="Multimodal Analyzer")
 
@@ -38,13 +38,19 @@ async def analyze(payload: AnalyzeRequest):
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Image processing failed: {str(e)}")
 
+    # --- Toxicity ---
+    text_toxicity = toxicity.check_toxicity(payload.text)
+    ocr_toxicity = toxicity.check_toxicity(ocr_text)
+    # take max toxicity score
+    final_toxicity = max(text_toxicity, ocr_toxicity)
+
     return AnalyzeResponse(
         text_sentiment=sentiment,
         text_summary=summary,
         topic=topic,
         image_classification=image_classification,
         ocr_text=ocr_text,
-        toxicity_score=None,
+        toxicity_score=final_toxicity,
         automated_response=f"Detected sentiment: {sentiment}",
-        flags={}
+        flags={"toxic": final_toxicity > 0.5}
     )
