@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from .schemas import AnalyzeRequest, AnalyzeResponse
-from .pipelines import nlp, vision, toxicity
+from .pipelines import nlp, vision, toxicity, fusion
 
 app = FastAPI(title="Multimodal Analyzer")
 
@@ -41,8 +41,16 @@ async def analyze(payload: AnalyzeRequest):
     # --- Toxicity ---
     text_toxicity = toxicity.check_toxicity(payload.text)
     ocr_toxicity = toxicity.check_toxicity(ocr_text)
-    # take max toxicity score
     final_toxicity = max(text_toxicity, ocr_toxicity)
+
+    # --- Fusion (smart response) ---
+    auto_response = fusion.generate_response(
+        sentiment=sentiment,
+        topic=topic,
+        image_class=image_classification,
+        ocr_text=ocr_text,
+        toxicity=final_toxicity
+    )
 
     return AnalyzeResponse(
         text_sentiment=sentiment,
@@ -51,6 +59,6 @@ async def analyze(payload: AnalyzeRequest):
         image_classification=image_classification,
         ocr_text=ocr_text,
         toxicity_score=final_toxicity,
-        automated_response=f"Detected sentiment: {sentiment}",
+        automated_response=auto_response,
         flags={"toxic": final_toxicity > 0.5}
     )
